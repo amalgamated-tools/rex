@@ -1,6 +1,6 @@
 # rex on Render
 
-Run a [rex](https://pkgs.superlogical.com/rex/) server on [Render](https://render.com). You reach it over your [Tailscale](https://tailscale.com) tailnet, and it has no public port.
+Run a [rex](https://www.superlogical.com/rex/docs/installation) server on [Render](https://render.com). You reach it over your [Tailscale](https://tailscale.com) tailnet, and it has no public port.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/amalgamated-tools/rex)
 
