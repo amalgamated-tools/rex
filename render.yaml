@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: rex
+    runtime: docker
+    plan: starter # persistent disks need a paid plan
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: TS_AUTHKEY
+        sync: false # set in the Dashboard: a Tailscale auth key
+      - key: REX_TAILSCALE_HOSTNAME
+        value: rex-render
+    disk:
+      name: rex-data
+      mountPath: /data
+      sizeGB: 1
