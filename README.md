@@ -6,7 +6,8 @@ Run a [rex](https://www.superlogical.com/rex/docs/installation) server on [Rende
 
 ## How it works
 
-- The image is Alpine Linux with rex installed from the superlogical apk repository.
+- The image is Alpine Linux with rex installed from the superlogical apk repository. The rex version is pinned in the `Dockerfile` (`ARG REX_VERSION`).
+- A GitHub workflow ([`update-rex.yml`](.github/workflows/update-rex.yml)) runs every day at 09:00 UTC. It finds the newest rex build on the channel, test-builds the image, and commits the new pin to `main`. Render then redeploys. See [Updates](#updates).
 - It runs `rex server run --tailscale`, so rex starts its own embedded Tailscale node. No `tailscaled` sidecar is needed.
 - On Render it is a **background worker**. Nothing listens on a public URL. Only devices on your tailnet can connect, and Tailscale tells rex who each caller is.
 - A persistent disk at `/data` stores the saved sessions and the Tailscale node identity. Redeploys and restarts come back as the same node with the same sessions.
@@ -59,6 +60,28 @@ rex -S render new
 | `REX_STATE_DIR` | `/data` | Where rex keeps sessions and the Tailscale state. Keep this on the disk. |
 
 To add tools to your sessions, such as git, an editor or language runtimes, add them to the `apk add` line in the `Dockerfile`.
+
+## Updates
+
+The `Dockerfile` pins these build arguments:
+
+| Argument | Purpose |
+| --- | --- |
+| `REX_CHANNEL` | Release channel: `snapshot` (every change), `preview` or `stable`. |
+| `REX_VERSION` | Exact apk version of rex, for example `0.0.1793899293-r0`. |
+| `REX_APK_KEY` | File name of the key that signs the packages. |
+
+The [`update-rex.yml`](.github/workflows/update-rex.yml) workflow keeps `REX_VERSION` current. It runs every day at 09:00 UTC, and you can also start it by hand from the Actions tab. Each run:
+
+1. Reads `APK_KEY_NAME` from the official [`install.sh`](https://pkgs.superlogical.com/rex/install.sh). If it no longer matches `REX_APK_KEY`, the run stops so you can review the change.
+2. Finds the newest `rex` in the channel's package index.
+3. If that is newer than the pin, it updates the `Dockerfile`, builds the image, checks that the server starts, and commits to `main`.
+
+Things to know:
+
+- **The workflow commits straight to `main`.** The snapshot channel keeps only its last ~20 builds, which is a few days' worth. A pin that sits unmerged in a PR soon points at a version that no longer exists, and any redeploy of `main` would then fail.
+- **Each update is a redeploy**, and a redeploy stops the programs running inside rex sessions. That's why the workflow runs once a day at a quiet hour. To change the time, edit its `cron` line.
+- To roll back, revert the update commit. This only works while the older version is still in the channel's index.
 
 ## Notes and troubleshooting
 

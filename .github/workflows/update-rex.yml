@@ -1,0 +1,95 @@
+name: Update rex
+
+# Pins the Dockerfile to the newest rex build on its channel. A commit to main makes Render
+# redeploy, and a redeploy stops programs running inside rex sessions, so this runs once a
+# day at a quiet hour instead of on every release.
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC = 4-5am US Eastern
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-rex
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned settings from the Dockerfile
+        id: pinned
+        run: |
+          arg() { sed -n "s/^ARG $1=//p" Dockerfile; }
+          for name in REX_CHANNEL REX_VERSION REX_APK_KEY; do
+            value=$(arg "$name")
+            [ -n "$value" ] || { echo "::error file=Dockerfile::ARG $name not found"; exit 1; }
+            echo "$name=$value" | tee -a "$GITHUB_OUTPUT"
+          done
+
+      - name: Check the signing key name against install.sh
+        env:
+          PINNED_KEY: ${{ steps.pinned.outputs.REX_APK_KEY }}
+        run: |
+          upstream=$(curl -fsSL https://pkgs.superlogical.com/rex/install.sh | sed -n 's/^APK_KEY_NAME=//p')
+          echo "install.sh APK_KEY_NAME=$upstream"
+          if [ "$upstream" != "$PINNED_KEY" ]; then
+            echo "::error file=Dockerfile::install.sh now names signing key '$upstream', but the Dockerfile pins '$PINNED_KEY'. Review the change and update REX_APK_KEY."
+            exit 1
+          fi
+
+      - name: Find the newest rex on the channel
+        id: latest
+        env:
+          CHANNEL: ${{ steps.pinned.outputs.REX_CHANNEL }}
+          PINNED: ${{ steps.pinned.outputs.REX_VERSION }}
+        run: |
+          version=$(curl -fsSL "https://pkgs.superlogical.com/rex/apk/$CHANNEL/x86_64/APKINDEX.tar.gz" |
+            tar -xzOf - APKINDEX |
+            awk '/^P:/ { p = substr($0, 3) } /^V:/ { if (p == "rex") print substr($0, 3) }' |
+            sort -V | tail -n 1)
+          [ -n "$version" ] || { echo "::error::no rex package in the $CHANNEL index"; exit 1; }
+          echo "pinned=$PINNED newest=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$version" = "$PINNED" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pin the new version
+        if: steps.latest.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.latest.outputs.version }}
+        run: |
+          sed -i "s/^ARG REX_VERSION=.*/ARG REX_VERSION=$VERSION/" Dockerfile
+          git diff --exit-code --quiet Dockerfile && { echo "::error::sed did not change the Dockerfile"; exit 1; }
+          git diff
+
+      - name: Build and smoke-test the image
+        if: steps.latest.outputs.changed == 'true'
+        run: |
+          docker build -t rex-render:check .
+          docker run --rm --entrypoint rex rex-render:check version
+          docker run -d --name rex-check rex-render:check
+          for _ in $(seq 1 20); do
+            docker logs rex-check 2>&1 | grep -q '"Rex server ready"' && break
+            sleep 1
+          done
+          docker logs rex-check 2>&1 | grep '"Rex server ready"' || { docker logs rex-check; exit 1; }
+          docker rm -f rex-check
+
+      - name: Commit and push
+        if: steps.latest.outputs.changed == 'true'
+        env:
+          OLD: ${{ steps.pinned.outputs.REX_VERSION }}
+          NEW: ${{ steps.latest.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898989+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update rex to $NEW" -m "Previous version: $OLD"
+          git push origin HEAD:main
