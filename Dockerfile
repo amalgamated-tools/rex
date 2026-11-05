@@ -18,6 +18,19 @@ RUN wget -O "/etc/apk/keys/${REX_APK_KEY}" "https://pkgs.superlogical.com/rex/ke
  && apk add --no-cache "rex=${REX_VERSION}" tini bash ca-certificates \
  && rex version
 
+# Claude Code, via the native installer. On musl (Alpine) it needs libgcc, libstdc++ and a
+# system ripgrep (USE_BUILTIN_RIPGREP=0). The installer puts the binary under /root/.local;
+# the /usr/local/bin symlink keeps it on PATH for login shells, because Alpine's
+# /etc/profile resets PATH. Config and login live on the disk (CLAUDE_CONFIG_DIR) so they
+# survive redeploys; the profile.d file sets it for login shells that drop the image ENV.
+ENV USE_BUILTIN_RIPGREP=0 \
+    CLAUDE_CONFIG_DIR=/data/claude
+RUN apk add --no-cache curl git libgcc libstdc++ ripgrep \
+ && curl -fsSL https://claude.ai/install.sh | bash \
+ && ln -sf /root/.local/bin/claude /usr/local/bin/claude \
+ && printf 'export USE_BUILTIN_RIPGREP=0\nexport CLAUDE_CONFIG_DIR=/data/claude\n' > /etc/profile.d/claude.sh \
+ && claude --version
+
 # Persistent state: saved sessions and the embedded Tailscale node identity.
 # Mount a Render disk here so the node doesn't re-enroll on every deploy.
 ENV REX_STATE_DIR=/data \

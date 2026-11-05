@@ -59,6 +59,8 @@ rex -S render new
 | `REX_TAILSCALE_HOSTNAME` | `rex-render` | Device name on your tailnet. |
 | `REX_STATE_DIR` | `/data` | Where rex keeps sessions and the Tailscale state. Keep this on the disk. |
 
+The image includes [Claude Code](https://claude.com/claude-code). Run `claude` in a session and sign in once. Its config and login are kept in `/data/claude` (`CLAUDE_CONFIG_DIR`), so they survive redeploys.
+
 To add tools to your sessions, such as git, an editor or language runtimes, add them to the `apk add` line in the `Dockerfile`.
 
 ## Updates
