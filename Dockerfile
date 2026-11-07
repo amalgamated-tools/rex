@@ -5,7 +5,7 @@ FROM alpine:3.22
 # Render redeploy. The snapshot channel only keeps its last ~20 builds (a few days), so an
 # old pin stops resolving; let the workflow keep it current.
 ARG REX_CHANNEL=snapshot
-ARG REX_VERSION=0.0.1793910724-r0
+ARG REX_VERSION=0.0.1794006277-r0
 # Name of the key that signs the apk packages. apk only trusts a signature when the key is
 # saved under exactly this name. The workflow checks it against APK_KEY_NAME in install.sh.
 ARG REX_APK_KEY=hello@superlogical.com-33cd23a8.rsa.pub
